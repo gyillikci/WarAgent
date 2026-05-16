@@ -44,8 +44,8 @@ def create_parser():
     return parser
 
 
-os.environ['CLAUDE_API_KEY'] = ""
-os.environ["OPENAI_API_KEY"] = ""
+os.environ.setdefault('CLAUDE_API_KEY', os.environ.get('ANTHROPIC_API_KEY', ''))
+os.environ.setdefault('OPENAI_API_KEY', '')
 
 ## counterfactual triggering event
 # trigger = "Today is sunny and nothing special happened."

@@ -119,8 +119,8 @@ def generate_action(prompt, model, round):
 
 def run_api(model, prompt, max_tokens_to_sample: int = 100000, temperature: float = 0):
     if model.startswith('claude') or model.startswith('Claude'):
-        print("Use Claude-2 to generate action plan...")
-        plan = run_claude(prompt,max_tokens_to_sample=max_tokens_to_sample,temperature=temperature)
+        print(f"Use {model} to generate action plan...")
+        plan = run_claude(prompt, model=model, max_tokens_to_sample=max_tokens_to_sample, temperature=temperature)
     elif (model.startswith('gpt') or model.startswith('GPT')) and '4' in model:# == "gpt-4-1106-preview":
         print("Use GPT-4 to generate action plan...")
         plan = run_gpt(prompt,temperature=temperature,model="gpt-4-1106-preview")
@@ -131,19 +131,19 @@ def run_api(model, prompt, max_tokens_to_sample: int = 100000, temperature: floa
         raise ValueError("Invalid model name")
     return plan
 
-def run_claude(text_prompt, max_tokens_to_sample: int = 100000, temperature: float = 0):
-    claude_api_key = os.environ["CLAUDE_API_KEY"]
+def run_claude(text_prompt, model: str = "claude-sonnet-4-6", max_tokens_to_sample: int = 100000, temperature: float = 0):
+    claude_api_key = os.environ.get("CLAUDE_API_KEY") or os.environ.get("ANTHROPIC_API_KEY")
     client = anthropic.Anthropic(api_key=claude_api_key)
-    prompt = f"{anthropic.HUMAN_PROMPT} {text_prompt}{anthropic.AI_PROMPT}"
-    resp = client.completions.create(
-        prompt=prompt,
-        stop_sequences=[anthropic.HUMAN_PROMPT],
-        # model="claude-v1.3-100k",
-        model="claude-2",
-        max_tokens_to_sample=max_tokens_to_sample,
+    if model in ("claude", "Claude", "claude-2", "claude-2.0", "claude-2.1"):
+        model = "claude-sonnet-4-6"
+    message = client.messages.create(
+        model=model,
+        max_tokens=min(max_tokens_to_sample, 8192),
         temperature=temperature,
-    ).completion
-    resp = resp.replace("""```json""", '').replace("""```""", '') 
+        messages=[{"role": "user", "content": text_prompt}],
+    )
+    resp = "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
+    resp = resp.replace("""```json""", '').replace("""```""", '')
     return resp
 
 def run_gpt(text_prompt, temperature: float = 0, model = "gpt-4-1106-preview"):
