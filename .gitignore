@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+src/log/trigger/*.log
+src/log/acc/*.log
+!src/log/trigger/2023-11-26_00:46:20.log
