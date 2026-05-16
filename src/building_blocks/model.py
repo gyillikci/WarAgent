@@ -23,6 +23,7 @@ __version__ = "0.0.1"
 
 import anthropic
 from openai import OpenAI
+import time
 from utils import *
 
 def generate_action(prompt, model, round):
@@ -136,12 +137,38 @@ def run_claude(text_prompt, model: str = "claude-sonnet-4-6", max_tokens_to_samp
     client = anthropic.Anthropic(api_key=claude_api_key)
     if model in ("claude", "Claude", "claude-2", "claude-2.0", "claude-2.1"):
         model = "claude-sonnet-4-6"
-    message = client.messages.create(
-        model=model,
-        max_tokens=min(max_tokens_to_sample, 8192),
-        temperature=temperature,
-        messages=[{"role": "user", "content": text_prompt}],
+
+    transient_excs = (
+        anthropic.APIConnectionError,
+        anthropic.APITimeoutError,
+        anthropic.RateLimitError,
+        anthropic.InternalServerError,
     )
+    max_attempts = 8
+    delay = 2.0
+    for attempt in range(1, max_attempts + 1):
+        try:
+            message = client.messages.create(
+                model=model,
+                max_tokens=min(max_tokens_to_sample, 8192),
+                temperature=temperature,
+                messages=[{"role": "user", "content": text_prompt}],
+            )
+            break
+        except transient_excs as e:
+            if attempt == max_attempts:
+                raise
+            print(f"Anthropic transient error ({type(e).__name__}); retry {attempt}/{max_attempts - 1} in {delay:.1f}s")
+            time.sleep(delay)
+            delay = min(delay * 2, 60.0)
+        except anthropic.APIStatusError as e:
+            if e.status_code in (408, 409, 429, 502, 503, 504, 529) and attempt < max_attempts:
+                print(f"Anthropic status {e.status_code}; retry {attempt}/{max_attempts - 1} in {delay:.1f}s")
+                time.sleep(delay)
+                delay = min(delay * 2, 60.0)
+                continue
+            raise
+
     resp = "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
     resp = resp.replace("""```json""", '').replace("""```""", '')
     return resp
